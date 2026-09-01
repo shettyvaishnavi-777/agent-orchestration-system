@@ -3,3 +3,5 @@ venv/
 __pycache__/
 *.pyc
 /agent-orchestration-system/
+/1memory/chroma_db/
+/1memory/memory_data.json

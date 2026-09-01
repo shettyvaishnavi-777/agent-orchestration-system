@@ -1,6 +1,7 @@
 import streamlit as st
 import sys
 
+
 # =========================================================
 # PAGE CONFIG
 # =========================================================
@@ -11,6 +12,7 @@ st.set_page_config(
     layout="wide"
 )
 
+
 # =========================================================
 # PROJECT PATHS
 # =========================================================
@@ -19,12 +21,18 @@ sys.path.insert(0, "1backend")
 sys.path.insert(0, "1agent")
 sys.path.insert(0, "1memory")
 
+
 # =========================================================
 # IMPORTS
 # =========================================================
 
 from main import run_task
-from memory import load_memory, clear_memory
+
+from memory import (
+    load_memory,
+    clear_memory,
+    search_memory
+)
 
 
 # =========================================================
@@ -37,7 +45,8 @@ page = st.sidebar.radio(
     "Navigation",
     [
         "🚀 Run Task",
-        "🧠 Memory & History"
+        "🧠 Memory & History",
+        "🔎 Semantic Memory Search"
     ]
 )
 
@@ -102,7 +111,6 @@ if page == "🚀 Run Task":
                     st.session_state["result"] = result
                     st.session_state["user_task"] = user_task
 
-                    # Clear old approval decision
                     st.session_state.pop(
                         "approval_decision",
                         None
@@ -114,7 +122,6 @@ if page == "🚀 Run Task":
                         f"❌ Error: {error}"
                     )
 
-
     # =====================================================
     # SHOW RESULT
     # =====================================================
@@ -122,7 +129,6 @@ if page == "🚀 Run Task":
     if "result" in st.session_state:
 
         result = st.session_state["result"]
-
 
         # =================================================
         # HUMAN APPROVAL
@@ -148,8 +154,6 @@ if page == "🚀 Run Task":
 
             col1, col2 = st.columns(2)
 
-
-            # APPROVE
             with col1:
 
                 if st.button(
@@ -171,8 +175,6 @@ if page == "🚀 Run Task":
                         "operation."
                     )
 
-
-            # REJECT
             with col2:
 
                 if st.button(
@@ -192,8 +194,6 @@ if page == "🚀 Run Task":
                         "The workflow has been stopped."
                     )
 
-
-            # SHOW DECISION
             decision = st.session_state.get(
                 "approval_decision"
             )
@@ -210,7 +210,6 @@ if page == "🚀 Run Task":
                     "🔴 Approval Status: REJECTED"
                 )
 
-
         # =================================================
         # COMPLETED TASK
         # =================================================
@@ -223,12 +222,13 @@ if page == "🚀 Run Task":
 
             st.divider()
 
-
             # =================================================
-            # STATUS
+            # EXECUTION STATUS
             # =================================================
 
-            st.subheader("📊 Execution Status")
+            st.subheader(
+                "📊 Execution Status"
+            )
 
             col1, col2, col3, col4, col5 = st.columns(5)
 
@@ -247,12 +247,13 @@ if page == "🚀 Run Task":
             with col5:
                 st.success("✅ Reviewer")
 
-
             # =================================================
             # EXECUTION TRACE
             # =================================================
 
-            st.subheader("🔍 Execution Trace")
+            st.subheader(
+                "🔍 Execution Trace"
+            )
 
             trace = result.get(
                 "trace",
@@ -262,7 +263,6 @@ if page == "🚀 Run Task":
             if trace:
 
                 for item in trace:
-
                     st.write(item)
 
             else:
@@ -271,12 +271,13 @@ if page == "🚀 Run Task":
                     "No execution trace available."
                 )
 
-
             # =================================================
             # SUPERVISOR PLAN
             # =================================================
 
-            st.subheader("🧠 Supervisor Plan")
+            st.subheader(
+                "🧠 Supervisor Plan"
+            )
 
             with st.expander(
                 "View Supervisor Execution Plan",
@@ -289,7 +290,6 @@ if page == "🚀 Run Task":
                         "No plan available."
                     )
                 )
-
 
             # =================================================
             # RESEARCH
@@ -309,15 +309,11 @@ if page == "🚀 Run Task":
                 )
 
                 if research:
-
                     st.markdown(research)
-
                 else:
-
                     st.info(
                         "No research result available."
                     )
-
 
             # =================================================
             # DATA
@@ -337,15 +333,11 @@ if page == "🚀 Run Task":
                 )
 
                 if analysis:
-
                     st.markdown(analysis)
-
                 else:
-
                     st.info(
                         "No data analysis available."
                     )
-
 
             # =================================================
             # WRITER
@@ -359,13 +351,17 @@ if page == "🚀 Run Task":
                 "View Generated Report"
             ):
 
-                st.markdown(
-                    result.get(
-                        "final_report",
-                        "No report available."
-                    )
+                report = result.get(
+                    "final_report",
+                    ""
                 )
 
+                if report:
+                    st.markdown(report)
+                else:
+                    st.info(
+                        "No report available."
+                    )
 
             # =================================================
             # REVIEWER
@@ -382,19 +378,22 @@ if page == "🚀 Run Task":
 
             if review:
 
-                # Show reviewer result
                 st.info(review)
 
-                # Detect status
-                review_lower = review.lower()
+                clean_review = (
+                    review
+                    .replace("*", "")
+                    .replace("#", "")
+                    .lower()
+                )
 
-                if "approved" in review_lower:
+                if "status: approved" in clean_review:
 
                     st.success(
                         "✅ Reviewer Status: APPROVED"
                     )
 
-                elif "rejected" in review_lower:
+                elif "status: rejected" in clean_review:
 
                     st.warning(
                         "⚠️ Reviewer Status: REJECTED"
@@ -405,7 +404,6 @@ if page == "🚀 Run Task":
                 st.info(
                     "No reviewer result available."
                 )
-
 
             # =================================================
             # FINAL REPORT
@@ -430,7 +428,6 @@ if page == "🚀 Run Task":
                     "No final report available."
                 )
 
-
         # =================================================
         # FAILED TASK
         # =================================================
@@ -451,8 +448,20 @@ if page == "🚀 Run Task":
             )
 
             for item in trace:
-
                 st.write(item)
+
+            review = result.get(
+                "review",
+                ""
+            )
+
+            if review:
+
+                st.subheader(
+                    "🔍 Reviewer Feedback"
+                )
+
+                st.markdown(review)
 
 
 # =========================================================
@@ -466,19 +475,26 @@ elif page == "🧠 Memory & History":
     )
 
     st.write(
-        "Previously completed tasks stored by the "
-        "AI Agent Orchestration System."
+        "Previously completed tasks stored in PostgreSQL."
     )
 
     st.divider()
-
 
     # =====================================================
     # LOAD MEMORY
     # =====================================================
 
-    memories = load_memory()
+    try:
 
+        memories = load_memory()
+
+    except Exception as error:
+
+        st.error(
+            f"❌ Could not load PostgreSQL memory: {error}"
+        )
+
+        memories = []
 
     # =====================================================
     # MEMORY OVERVIEW
@@ -499,23 +515,12 @@ elif page == "🧠 Memory & History":
 
     with col2:
 
-        if memories:
-
-            st.metric(
-                "Memory Status",
-                "Active"
-            )
-
-        else:
-
-            st.metric(
-                "Memory Status",
-                "Empty"
-            )
-
+        st.metric(
+            "Memory Status",
+            "Active" if memories else "Empty"
+        )
 
     st.divider()
-
 
     # =====================================================
     # PREVIOUS TASKS
@@ -524,7 +529,6 @@ elif page == "🧠 Memory & History":
     st.subheader(
         "📋 Previous Tasks"
     )
-
 
     if not memories:
 
@@ -550,9 +554,11 @@ elif page == "🧠 Memory & History":
 
                 st.write(
                     "**Saved at:** "
-                    + memory.get(
-                        "timestamp",
-                        "Unknown"
+                    + str(
+                        memory.get(
+                            "timestamp",
+                            "Unknown"
+                        )
                     )
                 )
 
@@ -589,7 +595,6 @@ elif page == "🧠 Memory & History":
                     )
                 )
 
-
     # =====================================================
     # DELETE MEMORY
     # =====================================================
@@ -603,8 +608,8 @@ elif page == "🧠 Memory & History":
     if memories:
 
         st.warning(
-            "Deleting memory permanently removes all "
-            "stored task history."
+            "Deleting memory permanently removes stored "
+            "PostgreSQL and ChromaDB memory."
         )
 
     else:
@@ -613,16 +618,121 @@ elif page == "🧠 Memory & History":
             "There is currently no saved memory."
         )
 
-
     if st.button(
         "🗑️ Delete All Memory",
         use_container_width=True
     ):
 
-        clear_memory()
+        try:
 
-        st.success(
-            "✅ All memory has been deleted."
-        )
+            clear_memory()
 
-        st.rerun()
+            st.success(
+                "✅ PostgreSQL and ChromaDB memory deleted."
+            )
+
+            st.rerun()
+
+        except Exception as error:
+
+            st.error(
+                f"❌ Could not clear memory: {error}"
+            )
+
+
+# =========================================================
+# SEMANTIC MEMORY SEARCH
+# =========================================================
+
+elif page == "🔎 Semantic Memory Search":
+
+    st.title(
+        "🔎 Semantic Memory Search"
+    )
+
+    st.write(
+        "Search previous tasks by meaning using ChromaDB."
+    )
+
+    st.divider()
+
+    # =====================================================
+    # SEARCH BOX
+    # =====================================================
+
+    query = st.text_input(
+        "Search previous tasks",
+        placeholder="Example: electric vehicles"
+    )
+
+    # =====================================================
+    # SEARCH BUTTON
+    # =====================================================
+
+    if st.button(
+        "🔎 Search Semantic Memory",
+        use_container_width=True
+    ):
+
+        if not query.strip():
+
+            st.warning(
+                "⚠️ Please enter a search query."
+            )
+
+        else:
+
+            try:
+
+                results = search_memory(
+                    query=query,
+                    limit=5
+                )
+
+                if not results:
+
+                    st.info(
+                        "No similar memories found."
+                    )
+
+                else:
+
+                    st.success(
+                        f"✅ Found {len(results)} similar memory/memories."
+                    )
+
+                    for index, result in enumerate(
+                        results,
+                        start=1
+                    ):
+
+                        st.subheader(
+                            f"🧠 Similar Memory {index}"
+                        )
+
+                        document = result.get(
+                            "document",
+                            ""
+                        )
+
+                        if document:
+
+                            st.markdown(document)
+
+                        distance = result.get(
+                            "distance"
+                        )
+
+                        if distance is not None:
+
+                            st.caption(
+                                f"Semantic distance: {distance:.4f}"
+                            )
+
+                        st.divider()
+
+            except Exception as error:
+
+                st.error(
+                    f"❌ Semantic search failed: {error}"
+                )
