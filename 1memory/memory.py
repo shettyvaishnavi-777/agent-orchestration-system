@@ -1,56 +1,82 @@
-import json
-import os
-from datetime import datetime
+import sys
+
+# =========================================================
+# PROJECT PATHS
+# =========================================================
+
+sys.path.insert(0, "1database")
+sys.path.insert(0, "1memory")
 
 
 # =========================================================
-# MEMORY FILE LOCATION
+# IMPORT DATABASE CONNECTION
 # =========================================================
 
-# Get the folder where this memory.py file is located
-MEMORY_FOLDER = os.path.dirname(os.path.abspath(__file__))
+from datab import get_connection
 
-# Store memory_data.json inside the same folder
-MEMORY_FILE = os.path.join(
-    MEMORY_FOLDER,
-    "memory_data.json"
+
+# =========================================================
+# IMPORT CHROMADB FUNCTIONS
+# =========================================================
+
+from semantic_memory import (
+    save_semantic_memory,
+    search_semantic_memory,
+    clear_semantic_memory
 )
 
 
 # =========================================================
-# LOAD MEMORY
+# LOAD MEMORY FROM POSTGRESQL
 # =========================================================
 
 def load_memory():
     """
-    Load all previously saved memories.
+    Load all memories from PostgreSQL.
     """
 
-    if not os.path.exists(MEMORY_FILE):
-        return []
+    conn = get_connection()
+    cursor = conn.cursor()
 
     try:
 
-        with open(
-            MEMORY_FILE,
-            "r",
-            encoding="utf-8"
-        ) as file:
+        cursor.execute("""
+            SELECT
+                id,
+                task,
+                research,
+                analysis,
+                final_report,
+                created_at
+            FROM tasks
+            ORDER BY id ASC
+        """)
 
-            data = json.load(file)
+        rows = cursor.fetchall()
 
-            # Make sure the JSON contains a list
-            if isinstance(data, list):
-                return data
+        memories = []
 
-            return []
+        for row in rows:
 
-    except (
-        json.JSONDecodeError,
-        OSError
-    ):
+            memories.append({
+                "id": row[0],
+                "user_task": row[1],
+                "research": row[2] or "",
+                "analysis": row[3] or "",
+                "final_report": row[4] or "",
+                "timestamp": (
+                    row[5].isoformat()
+                    if row[5]
+                    else None
+                )
+            })
 
-        return []
+        return memories
+
+    finally:
+
+        cursor.close()
+        conn.close()
 
 
 # =========================================================
@@ -64,48 +90,76 @@ def save_memory(
     final_report: str
 ):
     """
-    Save a completed task into long-term memory.
+    Save completed task to PostgreSQL
+    and ChromaDB.
     """
 
-    memories = load_memory()
+    # -----------------------------------------------------
+    # SAVE TO POSTGRESQL
+    # -----------------------------------------------------
 
-    memory = {
-        "timestamp": datetime.now().isoformat(),
-
-        "user_task": user_task,
-
-        "research": research[:2000],
-
-        "analysis": analysis[:2000],
-
-        "final_report": final_report[:3000]
-    }
-
-    memories.append(memory)
+    conn = get_connection()
+    cursor = conn.cursor()
 
     try:
 
-        with open(
-            MEMORY_FILE,
-            "w",
-            encoding="utf-8"
-        ) as file:
-
-            json.dump(
-                memories,
-                file,
-                indent=4,
-                ensure_ascii=False
+        cursor.execute(
+            """
+            INSERT INTO tasks
+            (
+                task,
+                research,
+                analysis,
+                final_report
             )
-
-        print(
-            f"✅ Memory saved to: {MEMORY_FILE}"
+            VALUES (%s, %s, %s, %s)
+            """,
+            (
+                user_task,
+                research[:2000],
+                analysis[:2000],
+                final_report[:3000]
+            )
         )
 
-    except OSError as error:
+        conn.commit()
 
         print(
-            f"❌ Could not save memory: {error}"
+            "✅ Memory saved to PostgreSQL!"
+        )
+
+    except Exception:
+
+        conn.rollback()
+        raise
+
+    finally:
+
+        cursor.close()
+        conn.close()
+
+
+    # -----------------------------------------------------
+    # SAVE TO CHROMADB
+    # -----------------------------------------------------
+
+    try:
+
+        save_semantic_memory(
+            user_task=user_task,
+            research=research,
+            analysis=analysis,
+            final_report=final_report
+        )
+
+        print(
+            "✅ Semantic memory saved to ChromaDB!"
+        )
+
+    except Exception as error:
+
+        print(
+            f"⚠️ ChromaDB save failed: {error}"
         )
 
 
@@ -115,86 +169,205 @@ def save_memory(
 
 def get_recent_memories(limit: int = 3):
     """
-    Return the most recent memories.
+    Return the most recent memories from PostgreSQL.
     """
 
-    memories = load_memory()
+    conn = get_connection()
+    cursor = conn.cursor()
 
-    return memories[-limit:]
+    try:
+
+        cursor.execute(
+            """
+            SELECT
+                id,
+                task,
+                research,
+                analysis,
+                final_report,
+                created_at
+            FROM tasks
+            ORDER BY id DESC
+            LIMIT %s
+            """,
+            (limit,)
+        )
+
+        rows = cursor.fetchall()
+
+        memories = []
+
+        for row in rows:
+
+            memories.append({
+                "id": row[0],
+                "user_task": row[1],
+                "research": row[2] or "",
+                "analysis": row[3] or "",
+                "final_report": row[4] or "",
+                "timestamp": (
+                    row[5].isoformat()
+                    if row[5]
+                    else None
+                )
+            })
+
+        # Same behavior as the old JSON version
+        memories.reverse()
+
+        return memories
+
+    finally:
+
+        cursor.close()
+        conn.close()
 
 
 # =========================================================
-# CLEAR MEMORY
+# SEARCH SEMANTIC MEMORY
+# =========================================================
+
+def search_memory(
+    query: str,
+    limit: int = 3
+):
+    """
+    Search previous tasks by meaning using ChromaDB.
+    """
+
+    return search_semantic_memory(
+        query=query,
+        limit=limit
+    )
+
+
+# =========================================================
+# CLEAR ALL MEMORY
 # =========================================================
 
 def clear_memory():
     """
-    Delete all stored memories.
+    Clear both PostgreSQL and ChromaDB memory.
     """
 
-    if os.path.exists(MEMORY_FILE):
+    # -----------------------------------------------------
+    # CLEAR POSTGRESQL
+    # -----------------------------------------------------
 
-        try:
+    conn = get_connection()
+    cursor = conn.cursor()
 
-            os.remove(MEMORY_FILE)
+    try:
 
-            print("✅ All memory deleted.")
+        cursor.execute(
+            "DELETE FROM tasks"
+        )
 
-        except OSError as error:
+        conn.commit()
 
-            print(
-                f"❌ Could not delete memory: {error}"
-            )
+        print(
+            "✅ All PostgreSQL memory deleted!"
+        )
 
-    else:
+    except Exception:
 
-        print("ℹ️ No memory file exists.")
+        conn.rollback()
+        raise
+
+    finally:
+
+        cursor.close()
+        conn.close()
+
+
+    # -----------------------------------------------------
+    # CLEAR CHROMADB
+    # -----------------------------------------------------
+
+    try:
+
+        clear_semantic_memory()
+
+    except Exception as error:
+
+        print(
+            f"⚠️ ChromaDB clear failed: {error}"
+        )
 
 
 # =========================================================
-# TEST MEMORY
+# TEST
 # =========================================================
 
 if __name__ == "__main__":
 
     print("\n========================================")
-    print("           MEMORY SYSTEM TEST")
+    print("     POSTGRESQL + CHROMADB MEMORY TEST")
     print("========================================")
 
+
+    # Save a test task
     save_memory(
-        user_task="Research electric vehicles",
+        user_task="Test combined semantic memory",
 
         research=(
-            "Electric vehicles use electric motors "
-            "and rechargeable batteries."
+            "Electric vehicles use batteries "
+            "and electric motors."
         ),
 
         analysis=(
-            "EVs can reduce tailpipe emissions "
-            "and operating costs."
+            "Electric vehicles can reduce "
+            "tailpipe emissions."
         ),
 
         final_report=(
-            "Electric vehicles are an important "
-            "transportation technology."
+            "This is a combined PostgreSQL "
+            "and ChromaDB memory test."
         )
     )
 
+
+    # Read PostgreSQL memories
     memories = get_recent_memories()
 
-    print("\nStored memories:")
+    print("\nRecent PostgreSQL memories:")
 
     for memory in memories:
 
-        print("\nTask:")
-        print(memory["user_task"])
+        print(
+            memory["id"],
+            memory["user_task"],
+            memory["timestamp"]
+        )
 
-        print("Time:")
-        print(memory["timestamp"])
 
-    print("\nMemory file:")
-    print(MEMORY_FILE)
+    # Search ChromaDB
+    print("\nSemantic search:")
+
+    results = search_memory(
+        "Tell me about electric cars",
+        limit=3
+    )
+
+    for result in results:
+
+        print("\n------------------------------")
+
+        print(
+            result.get(
+                "document",
+                ""
+            )
+        )
+
+        print(
+            "Distance:",
+            result.get(
+                "distance"
+            )
+        )
+
 
     print("\n========================================")
-    print("        MEMORY TEST COMPLETED")
+    print("     COMBINED MEMORY TEST COMPLETE")
     print("========================================")

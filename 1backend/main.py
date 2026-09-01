@@ -14,7 +14,9 @@ from langgraph.graph import StateGraph, START, END
 load_dotenv()
 
 if not os.getenv("GROQ_API_KEY"):
-    raise ValueError("GROQ_API_KEY not found in .env file")
+    raise ValueError(
+        "GROQ_API_KEY not found in .env file"
+    )
 
 
 # =========================================================
@@ -27,7 +29,7 @@ sys.path.insert(0, "1memory")
 
 
 # =========================================================
-# IMPORT AGENTS
+# IMPORT AGENTS / MODULES
 # =========================================================
 
 from research_agent import research_agent
@@ -40,7 +42,7 @@ from memory import save_memory
 
 
 # =========================================================
-# LLM
+# GROQ LLM
 # =========================================================
 
 llm = ChatGroq(
@@ -74,7 +76,7 @@ class State(TypedDict):
 
 
 # =========================================================
-# SUPERVISOR
+# SUPERVISOR AGENT
 # =========================================================
 
 def supervisor(state: State):
@@ -82,7 +84,8 @@ def supervisor(state: State):
     task = state["user_task"]
 
     prompt = f"""
-You are the Supervisor Agent.
+You are the Supervisor Agent in a multi-agent AI
+orchestration system.
 
 USER TASK:
 {task}
@@ -90,6 +93,7 @@ USER TASK:
 Create a concise execution plan.
 
 Available agents:
+
 1. Research Agent
 2. Data Analysis Agent
 3. Writer Agent
@@ -105,7 +109,15 @@ Only create the execution plan.
 
     trace = state.get("trace", [])
 
-    trace.append("✅ Supervisor created execution plan")
+    trace.append(
+        "✅ Supervisor created execution plan"
+    )
+
+    print("\n========================================")
+    print("             SUPERVISOR")
+    print("========================================")
+
+    print(response.content)
 
     return {
         "plan": response.content,
@@ -129,8 +141,17 @@ def safety_check(state: State):
 
     if requires_human_approval(task):
 
-        trace.append("⚠️ Sensitive action detected")
-        trace.append("⏸️ Human approval required")
+        print(
+            "⚠️ Sensitive action detected."
+        )
+
+        trace.append(
+            "⚠️ Sensitive action detected"
+        )
+
+        trace.append(
+            "⏸️ Human approval required"
+        )
 
         return {
             "human_approved": False,
@@ -138,7 +159,13 @@ def safety_check(state: State):
             "trace": trace
         }
 
-    trace.append("✅ Safety check passed")
+    print(
+        "✅ No human approval required."
+    )
+
+    trace.append(
+        "✅ Safety check passed"
+    )
 
     return {
         "human_approved": True,
@@ -163,14 +190,16 @@ def safety_router(state: State):
 
 
 # =========================================================
-# WAIT
+# WAIT NODE
 # =========================================================
 
 def wait_node(state: State):
 
     trace = state.get("trace", [])
 
-    trace.append("⏸️ Workflow paused for human approval")
+    trace.append(
+        "⏸️ Workflow paused for human approval"
+    )
 
     return {
         "status": "pending_approval",
@@ -179,18 +208,26 @@ def wait_node(state: State):
 
 
 # =========================================================
-# RESEARCH
+# RESEARCH AGENT
 # =========================================================
 
 def research_node(state: State):
 
     trace = state.get("trace", [])
 
-    attempts = state.get("research_attempts", 0) + 1
+    attempts = (
+        state.get("research_attempts", 0) + 1
+    )
 
     trace.append(
         f"🔎 Research Agent attempt {attempts}"
     )
+
+    print("\n========================================")
+    print(
+        f"       RESEARCH AGENT - ATTEMPT {attempts}"
+    )
+    print("========================================")
 
     try:
 
@@ -199,15 +236,22 @@ def research_node(state: State):
         )
 
         if not result or not result.strip():
+
             raise ValueError(
                 "Research Agent returned empty result."
             )
 
-        result = result[:2500]
+        result = result[:3000]
+
+        trace.append(
+            "🌐 Web Search Tool used"
+        )
 
         trace.append(
             "✅ Research Agent completed successfully"
         )
+
+        print(result)
 
         return {
             "research": result,
@@ -217,8 +261,13 @@ def research_node(state: State):
 
     except Exception as error:
 
+        print(
+            f"❌ Research Agent failed: {error}"
+        )
+
         trace.append(
-            f"❌ Research Agent failed: {str(error)[:100]}"
+            "❌ Research Agent failed: "
+            f"{str(error)[:100]}"
         )
 
         if attempts < 2:
@@ -232,9 +281,14 @@ def research_node(state: State):
                 "trace": trace
             }
 
+        trace.append(
+            "🛑 Research Agent failed after retry"
+        )
+
         return {
-            "status": "failed",
+            "research": "",
             "research_attempts": attempts,
+            "status": "failed",
             "trace": trace
         }
 
@@ -255,30 +309,39 @@ def research_router(state: State):
 
 
 # =========================================================
-# DATA
+# DATA AGENT
 # =========================================================
 
 def data_node(state: State):
 
     trace = state.get("trace", [])
 
-    attempts = state.get("data_attempts", 0) + 1
+    attempts = (
+        state.get("data_attempts", 0) + 1
+    )
 
     trace.append(
         f"📊 Data Agent attempt {attempts}"
     )
 
+    print("\n========================================")
+    print(
+        f"          DATA AGENT - ATTEMPT {attempts}"
+    )
+    print("========================================")
+
     try:
 
-        research = state["research"][:1800]
+        research = state["research"][:2500]
 
         result = data_agent(
             f"""
-Analyze this research:
+Analyze the following research:
 
 {research}
 
 Provide:
+
 1. Important data points
 2. Comparisons
 3. Key observations
@@ -286,19 +349,23 @@ Provide:
 
 Keep the response concise.
 Do not invent data.
+Use only the supplied research.
 """
         )
 
         if not result or not result.strip():
+
             raise ValueError(
                 "Data Agent returned empty result."
             )
 
-        result = result[:2000]
+        result = result[:2500]
 
         trace.append(
             "✅ Data Agent completed successfully"
         )
+
+        print(result)
 
         return {
             "analysis": result,
@@ -308,8 +375,13 @@ Do not invent data.
 
     except Exception as error:
 
+        print(
+            f"❌ Data Agent failed: {error}"
+        )
+
         trace.append(
-            f"❌ Data Agent failed: {str(error)[:100]}"
+            "❌ Data Agent failed: "
+            f"{str(error)[:100]}"
         )
 
         if attempts < 2:
@@ -323,9 +395,14 @@ Do not invent data.
                 "trace": trace
             }
 
+        trace.append(
+            "🛑 Data Agent failed after retry"
+        )
+
         return {
-            "status": "failed",
+            "analysis": "",
             "data_attempts": attempts,
+            "status": "failed",
             "trace": trace
         }
 
@@ -346,31 +423,43 @@ def data_router(state: State):
 
 
 # =========================================================
-# WRITER
+# WRITER AGENT
 # =========================================================
 
 def writer_node(state: State):
 
     trace = state.get("trace", [])
 
-    attempts = state.get("writer_attempts", 0) + 1
+    attempts = (
+        state.get("writer_attempts", 0) + 1
+    )
 
     trace.append(
         f"📝 Writer Agent attempt {attempts}"
     )
 
+    print("\n========================================")
+    print(
+        f"         WRITER AGENT - ATTEMPT {attempts}"
+    )
+    print("========================================")
+
     try:
 
-        task = state["user_task"][:500]
-        research = state["research"][:1000]
-        analysis = state["analysis"][:1000]
+        task = state["user_task"][:1000]
 
-        # Include reviewer feedback when rewriting
-        review = state.get("review", "")[:1000]
+        research = state["research"][:2000]
+
+        analysis = state["analysis"][:2000]
+
+        review = state.get(
+            "review",
+            ""
+        )[:2000]
 
         result = writer_agent(
             f"""
-Create a professional final report.
+Create a COMPLETE and professional final report.
 
 USER TASK:
 {task}
@@ -381,35 +470,59 @@ RESEARCH:
 DATA ANALYSIS:
 {analysis}
 
-PREVIOUS REVIEW FEEDBACK:
+REVIEWER FEEDBACK:
 {review}
 
-Include:
-1. Title
-2. Introduction
-3. Main Findings
-4. Comparison
-5. Conclusion
+IMPORTANT REQUIREMENTS:
 
-Use only the supplied information.
-Do not invent facts.
-Keep the report concise.
+1. Complete every required section.
+2. Do not stop in the middle of a sentence.
+3. Do not stop in the middle of a table.
+4. Do not use unfinished text such as "...".
+5. Include a clear conclusion.
+6. Include a References section.
+7. Do not invent sources, URLs, citations, or facts.
+8. Use only the supplied information.
+9. If reviewer feedback exists, fix every issue.
+10. Make sure the report ends properly.
 
-If reviewer feedback is provided,
-improve the report based on it.
+Required sections:
+
+# Title
+
+## 1. Introduction
+
+## 2. Main Findings
+
+## 3. Comparison
+
+## 4. Advantages and Disadvantages
+
+## 5. Conclusion
+
+## 6. References
+
+If references are not available, write:
+
+"References were not provided in the available source material."
+
+Return ONLY the final polished report.
 """
         )
 
         if not result or not result.strip():
+
             raise ValueError(
                 "Writer Agent returned empty result."
             )
 
-        result = result[:5000]
+        result = result[:7000]
 
         trace.append(
             "✅ Writer Agent completed successfully"
         )
+
+        print(result)
 
         return {
             "final_report": result,
@@ -419,8 +532,13 @@ improve the report based on it.
 
     except Exception as error:
 
+        print(
+            f"❌ Writer Agent failed: {error}"
+        )
+
         trace.append(
-            f"❌ Writer Agent failed: {str(error)[:100]}"
+            "❌ Writer Agent failed: "
+            f"{str(error)[:100]}"
         )
 
         if attempts < 2:
@@ -434,46 +552,65 @@ improve the report based on it.
                 "trace": trace
             }
 
+        trace.append(
+            "🛑 Writer Agent failed after retry"
+        )
+
         return {
-            "status": "failed",
+            "final_report": "",
             "writer_attempts": attempts,
+            "status": "failed",
             "trace": trace
         }
 
 
 # =========================================================
-# REVIEWER
+# REVIEWER AGENT
 # =========================================================
 
 def review_node(state: State):
 
     trace = state.get("trace", [])
 
-    attempts = state.get("review_attempts", 0) + 1
+    attempts = (
+        state.get("review_attempts", 0) + 1
+    )
 
     trace.append(
         f"🔍 Reviewer Agent attempt {attempts}"
     )
 
+    print("\n========================================")
+    print(
+        f"        REVIEWER AGENT - ATTEMPT {attempts}"
+    )
+    print("========================================")
+
     try:
 
         review = reviewer_agent(
-            user_task=state["user_task"][:500],
-            research=state["research"][:1000],
-            analysis=state["analysis"][:1000],
-            final_report=state["final_report"][:3000]
+            user_task=state["user_task"][:1000],
+
+            research=state["research"][:2000],
+
+            analysis=state["analysis"][:2000],
+
+            final_report=state["final_report"][:6000]
         )
 
         if not review or not review.strip():
+
             raise ValueError(
                 "Reviewer returned empty result."
             )
 
-        review = review[:2000]
+        review = review[:3000]
 
         trace.append(
             "✅ Reviewer Agent completed"
         )
+
+        print(review)
 
         return {
             "review": review,
@@ -483,13 +620,19 @@ def review_node(state: State):
 
     except Exception as error:
 
+        print(
+            f"❌ Reviewer Agent failed: {error}"
+        )
+
         trace.append(
-            f"❌ Reviewer Agent failed: {str(error)[:100]}"
+            "❌ Reviewer Agent failed: "
+            f"{str(error)[:100]}"
         )
 
         return {
-            "status": "failed",
+            "review": "",
             "review_attempts": attempts,
+            "status": "failed",
             "trace": trace
         }
 
@@ -500,33 +643,100 @@ def review_node(state: State):
 
 def review_router(state: State):
 
-    review = state.get("review", "").lower()
+    review = state.get(
+        "review",
+        ""
+    )
 
-    # Simple approval detection
-    if "approved" in review:
+    trace = state.get(
+        "trace",
+        []
+    )
+
+    # Remove Markdown characters and normalize case.
+    # This handles:
+    # STATUS: APPROVED
+    # **STATUS:** APPROVED
+    # **STATUS: APPROVED**
+    clean_review = (
+        review
+        .replace("*", "")
+        .replace("#", "")
+        .strip()
+        .lower()
+    )
+
+    # =====================================================
+    # APPROVED
+    # =====================================================
+
+    if "status: approved" in clean_review:
+
+        trace.append(
+            "✅ Reviewer approved the report"
+        )
 
         return "finish"
 
-    # Reject / improvement
-    if "rejected" in review:
 
-        if state.get("writer_attempts", 0) < 2:
+    # =====================================================
+    # REJECTED
+    # =====================================================
+
+    if "status: rejected" in clean_review:
+
+        trace.append(
+            "⚠️ Reviewer rejected the report"
+        )
+
+        # Give Writer one revision.
+        if state.get(
+            "writer_attempts",
+            0
+        ) < 2:
+
+            trace.append(
+                "🔄 Reviewer feedback sent back to Writer"
+            )
+
             return "rewrite"
 
-        return "finish"
 
-    # If reviewer did not clearly say approved/rejected,
-    # accept the report after review.
-    return "finish"
+        # Maximum revision reached.
+        trace.append(
+            "❌ Report rejected after maximum "
+            "revision attempts"
+        )
+
+        return "stop"
+
+
+    # =====================================================
+    # UNCLEAR REVIEW
+    # =====================================================
+
+    trace.append(
+        "⚠️ Reviewer status was unclear"
+    )
+
+    trace.append(
+        "🛑 Workflow stopped because review "
+        "was unclear"
+    )
+
+    return "stop"
 
 
 # =========================================================
-# STOP
+# STOP NODE
 # =========================================================
 
 def stop_node(state: State):
 
-    trace = state.get("trace", [])
+    trace = state.get(
+        "trace",
+        []
+    )
 
     trace.append(
         "🛑 Workflow stopped"
@@ -539,12 +749,15 @@ def stop_node(state: State):
 
 
 # =========================================================
-# FINISH
+# FINISH NODE
 # =========================================================
 
 def finish_node(state: State):
 
-    trace = state.get("trace", [])
+    trace = state.get(
+        "trace",
+        []
+    )
 
     trace.append(
         "✅ Workflow completed successfully"
@@ -557,26 +770,64 @@ def finish_node(state: State):
 
 
 # =========================================================
-# CREATE LANGGRAPH
+# BUILD LANGGRAPH
 # =========================================================
 
 graph = StateGraph(State)
 
-graph.add_node("supervisor", supervisor)
-graph.add_node("safety_check", safety_check)
-graph.add_node("wait", wait_node)
 
-graph.add_node("research", research_node)
-graph.add_node("data", data_node)
-graph.add_node("writer", writer_node)
-graph.add_node("reviewer", review_node)
+# =========================================================
+# ADD NODES
+# =========================================================
 
-graph.add_node("finish", finish_node)
-graph.add_node("stop", stop_node)
+graph.add_node(
+    "supervisor",
+    supervisor
+)
+
+graph.add_node(
+    "safety_check",
+    safety_check
+)
+
+graph.add_node(
+    "wait",
+    wait_node
+)
+
+graph.add_node(
+    "research",
+    research_node
+)
+
+graph.add_node(
+    "data",
+    data_node
+)
+
+graph.add_node(
+    "writer",
+    writer_node
+)
+
+graph.add_node(
+    "reviewer",
+    review_node
+)
+
+graph.add_node(
+    "finish",
+    finish_node
+)
+
+graph.add_node(
+    "stop",
+    stop_node
+)
 
 
 # =========================================================
-# EDGES
+# START
 # =========================================================
 
 graph.add_edge(
@@ -584,10 +835,20 @@ graph.add_edge(
     "supervisor"
 )
 
+
+# =========================================================
+# SUPERVISOR → SAFETY
+# =========================================================
+
 graph.add_edge(
     "supervisor",
     "safety_check"
 )
+
+
+# =========================================================
+# SAFETY ROUTING
+# =========================================================
 
 graph.add_conditional_edges(
     "safety_check",
@@ -599,13 +860,21 @@ graph.add_conditional_edges(
     }
 )
 
-# Pending approval ends temporarily
+
+# =========================================================
+# HUMAN APPROVAL WAIT
+# =========================================================
+
 graph.add_edge(
     "wait",
     END
 )
 
-# Research
+
+# =========================================================
+# RESEARCH ROUTING
+# =========================================================
+
 graph.add_conditional_edges(
     "research",
     research_router,
@@ -616,7 +885,11 @@ graph.add_conditional_edges(
     }
 )
 
-# Data
+
+# =========================================================
+# DATA ROUTING
+# =========================================================
+
 graph.add_conditional_edges(
     "data",
     data_router,
@@ -627,21 +900,35 @@ graph.add_conditional_edges(
     }
 )
 
-# Writer → Reviewer
+
+# =========================================================
+# WRITER → REVIEWER
+# =========================================================
+
 graph.add_edge(
     "writer",
     "reviewer"
 )
 
-# Reviewer → Finish or Writer
+
+# =========================================================
+# REVIEWER ROUTING
+# =========================================================
+
 graph.add_conditional_edges(
     "reviewer",
     review_router,
     {
         "finish": "finish",
-        "rewrite": "writer"
+        "rewrite": "writer",
+        "stop": "stop"
     }
 )
+
+
+# =========================================================
+# FINISH / STOP
+# =========================================================
 
 graph.add_edge(
     "finish",
@@ -654,17 +941,20 @@ graph.add_edge(
 )
 
 
-# Compile
+# =========================================================
+# COMPILE
+# =========================================================
+
 app = graph.compile()
 
 
 # =========================================================
-# RUN FUNCTION
+# RUN TASK
 # =========================================================
 
 def run_task(user_task: str):
 
-    return app.invoke({
+    result = app.invoke({
 
         "user_task": user_task,
 
@@ -694,6 +984,43 @@ def run_task(user_task: str):
     })
 
 
+    # =====================================================
+    # SAVE ONLY COMPLETED / APPROVED TASKS
+    # =====================================================
+
+    if result["status"] == "completed":
+
+        save_memory(
+            user_task=user_task,
+
+            research=result.get(
+                "research",
+                ""
+            ),
+
+            analysis=result.get(
+                "analysis",
+                ""
+            ),
+
+            final_report=result.get(
+                "final_report",
+                ""
+            )
+        )
+
+        result["trace"].append(
+            "💾 Task saved to PostgreSQL"
+        )
+
+        result["trace"].append(
+            "🧠 Semantic memory saved to ChromaDB"
+        )
+
+
+    return result
+
+
 # =========================================================
 # TERMINAL TEST
 # =========================================================
@@ -706,7 +1033,10 @@ if __name__ == "__main__":
     performance, charging and environmental benefits.
     """
 
-    result = run_task(user_task)
+    result = run_task(
+        user_task
+    )
+
 
     if result["status"] == "completed":
 
@@ -714,22 +1044,24 @@ if __name__ == "__main__":
         print("             FINAL REPORT")
         print("========================================")
 
-        print(result["final_report"])
+        print(
+            result.get(
+                "final_report",
+                ""
+            )
+        )
 
         print("\n========================================")
         print("              REVIEW")
         print("========================================")
 
-        print(result["review"])
-
-        save_memory(
-            user_task=user_task,
-            research=result["research"],
-            analysis=result["analysis"],
-            final_report=result["final_report"]
+        print(
+            result.get(
+                "review",
+                "No review available."
+            )
         )
 
-        print("\n✅ Task saved to memory.")
 
     elif result["status"] == "pending_approval":
 
@@ -739,18 +1071,32 @@ if __name__ == "__main__":
 
         print(user_task)
 
+
     else:
 
         print("\n========================================")
         print("             TASK FAILED")
         print("========================================")
 
+        print(
+            result.get(
+                "review",
+                ""
+            )
+        )
+
+
     print("\n========================================")
     print("          EXECUTION TRACE")
     print("========================================")
 
-    for item in result["trace"]:
+    for item in result.get(
+        "trace",
+        []
+    ):
+
         print(item)
+
 
     print("\n========================================")
     print("       ORCHESTRATION FINISHED")
