@@ -1,0 +1,40 @@
+services:
+
+  app:
+    build: .
+    container_name: agent-app
+    ports:
+      - "8501:8501"
+    environment:
+      GROQ_API_KEY: ${GROQ_API_KEY}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: agent_orchestration
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    depends_on:
+      - postgres
+      - redis
+
+  postgres:
+    image: postgres:18
+    container_name: agent-postgres
+    environment:
+      POSTGRES_DB: agent_orchestration
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+
+  redis:
+    image: redis:7
+    container_name: agent-redis
+    ports:
+      - "6380:6379"
+
+volumes:
+  postgres_data:

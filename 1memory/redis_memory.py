@@ -1,13 +1,37 @@
+import os
 import redis
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 # =========================================================
 # REDIS CONNECTION
 # =========================================================
 
+# When running inside Docker Compose:
+#   REDIS_HOST=redis
+#   REDIS_PORT=6379
+#
+# When running directly on Windows:
+#   localhost:6380
+
+redis_host = os.getenv(
+    "REDIS_HOST",
+    "localhost"
+)
+
+redis_port = int(
+    os.getenv(
+        "REDIS_PORT",
+        "6380"
+    )
+)
+
+
 redis_client = redis.Redis(
-    host="localhost",
-    port=6380,
+    host=redis_host,
+    port=redis_port,
     decode_responses=True
 )
 
@@ -24,13 +48,22 @@ def test_redis():
 
         if response:
 
-            print("✅ Redis connection successful!")
+            print(
+                f"✅ Redis connection successful "
+                f"({redis_host}:{redis_port})"
+            )
+
             return True
 
     except Exception as error:
 
-        print(f"❌ Redis connection failed: {error}")
+        print(
+            f"❌ Redis connection failed: {error}"
+        )
+
         return False
+
+    return False
 
 
 # =========================================================
@@ -60,11 +93,9 @@ def get_working_memory(
     task_id: str
 ):
 
-    data = redis_client.hgetall(
+    return redis_client.hgetall(
         f"task:{task_id}"
     )
-
-    return data
 
 
 # =========================================================

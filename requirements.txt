@@ -4,3 +4,6 @@ langchain-groq
 python-dotenv
 streamlit
 ddgs
+psycopg[binary]
+redis
+chromadb
